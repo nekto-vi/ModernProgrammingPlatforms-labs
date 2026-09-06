@@ -2,205 +2,262 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Список задач</title>
     <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --border: #e2e8f0;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            padding: 40px;
-            background-color: #ffffff;
-            max-width: 800px;
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 650px;
             margin: 0 auto;
         }
 
         h1 {
-            margin-bottom: 20px;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 30px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            color: #0f172a;
         }
 
-        .todo-container {
-            background: #f9f9f9; 
-            padding: 20px;     
-            border: 1px solid #eee;   
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+        /* Форма добавления */
+        .add-card {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 32px;
+            border: 1px solid var(--border);
         }
 
         .main-input {
             width: 100%;
-            box-sizing: border-box;        
-            padding: 12px 15px;  
-            font-size: 18px;      
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            outline: none;
-        }
-
-        .main-input:focus {
-            border-color: #007bff;
-        }
-
-        .form-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            box-sizing: border-box;
+            padding: 14px 16px;
             font-size: 16px;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .main-input:focus { border-color: var(--primary); }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .input-group { display: flex; flex-direction: column; gap: 6px; }
+
+        label { font-size: 0.875rem; font-weight: 600; color: var(--text-muted); }
+
+        input[type="date"], input[type="file"] {
+            padding: 8px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
         }
 
         .submit-btn {
-            width: fit-content;
-            padding: 10px 25px;
-            cursor: pointer;
-            background-color: #007bff;
+            width: 100%;
+            padding: 12px;
+            background-color: var(--primary);
             color: white;
             border: none;
-            border-radius: 5px;
-            font-weight: bold;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
         }
 
-        .submit-btn:hover {
-            background-color: #0056b3;
-        }
+        .submit-btn:hover { background-color: var(--primary-hover); }
 
+        /* Фильтры */
         .filters {
-            margin-top: 30px;
-            margin-bottom: 20px;
-            font-size: 14px;
-            padding: 10px;
-            background: #f0f0f0;
-            border-radius: 5px;
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            padding: 4px;
+            background: #f1f5f9;
+            width: fit-content;
+            border-radius: 12px;
         }
 
         .filters a {
             text-decoration: none;
-            color: #0000ee;
-            margin: 0 5px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-muted);
         }
 
         .filters a.active {
-            font-weight: bold;
-            color: black;
-            text-decoration: none;
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        /* Стили для карточек задач */
-        .task-list {
-            margin-top: 20px;
+        /* Список задач */
+        .task-card {
+            background: var(--card-bg);
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column; /* Элементы друг под другом */
+            gap: 12px;
+            transition: transform 0.2s;
         }
 
-        .task {
-            border: 1px solid #ddd;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            position: relative;
-            transition: 0.2s;
+        .task-card:hover { transform: translateY(-2px); }
+
+        .task-header { display: flex; justify-content: space-between; align-items: flex-start; }
+
+        .task-title { font-size: 1.15rem; font-weight: 700; margin: 0; color: var(--text-main); }
+
+        .badge-overdue {
+            background: #fee2e2;
+            color: var(--danger);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: 800;
         }
 
-        .task.done {
-            background-color: #f8f9fa;
-            opacity: 0.7;
-        }
-
-        .task.done strong {
-            text-decoration: line-through;
-            color: #6c757d;
-        }
-
-        .overdue {
-            border: 2px solid #ff4d4d !important;
-            background-color: #fff5f5;
-        }
-
-        .overdue-label { 
-            color: #ff4d4d; 
-            font-weight: bold; 
-            font-size: 0.85em;
-            margin-left: 10px;
-        }
+        .task-date { font-size: 0.9rem; color: var(--text-muted); }
 
         .file-link {
-            display: inline-block;
-            margin-top: 8px;
-            color: #17a2b8;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #2563eb;
             text-decoration: none;
-            font-size: 0.9em;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-top: 4px;
         }
 
-        .toggle-btn {
-            margin-top: 10px;
-            padding: 5px 10px;
+        /* Кнопка внизу карточки */
+        .status-btn {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: #f8fafc;
             cursor: pointer;
-            border: 1px solid #ccc;
-            background: white;
-            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
         }
+
+        .status-btn:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        /* Стили для выполненных */
+        .task-card.done { background: #fcfcfc; opacity: 0.7; }
+        .task-card.done .task-title { text-decoration: line-through; color: var(--text-muted); }
+        .task-card.done .status-btn { background: #f1f5f9; color: var(--text-muted); }
+
+        .overdue-border { border-left: 5px solid var(--danger); }
     </style>
 </head>
 <body>
 
-    <h1>📋 Список задач</h1>
+<div class="container">
+    <h1>📋 План на сегодня</h1>
 
-    <form action="/add" method="POST" enctype="multipart/form-data" class="todo-container">
-        <input type="text" name="title" class="main-input" placeholder="Что нужно сделать?" required>
-
-        <div class="form-row">
-            <label>Срок выполнения:</label>
-            <input type="date" name="dueDate" required>
+    <!-- Форма -->
+    <form action="/add" method="POST" enctype="multipart/form-data" class="add-card">
+        <input type="text" name="title" class="main-input" placeholder="Название новой задачи..." required>
+        <div class="form-grid">
+            <div class="input-group">
+                <label>Крайний срок</label>
+                <input type="date" name="dueDate" required>
+            </div>
+            <div class="input-group">
+                <label>Прикрепить файл</label>
+                <input type="file" name="taskFile">
+            </div>
         </div>
-
-        <div class="form-row">
-            <label>Прикрепить файл:</label>
-            <input type="file" name="taskFile">
-        </div>
-
-        <button type="submit" class="submit-btn">Создать задачу</button>
+        <button type="submit" class="submit-btn">Добавить задачу</button>
     </form>
 
+    <!-- Фильтры -->
     <div class="filters">
-        Фильтр: 
-        <a href="/" class="<%= !currentFilter ? 'active' : '' %>">Все</a> | 
-        <a href="/?filter=todo" class="<%= currentFilter === 'todo' ? 'active' : '' %>">Только активные</a> | 
+        <a href="/" class="<%= !currentFilter ? 'active' : '' %>">Все</a>
+        <a href="/?filter=todo" class="<%= currentFilter === 'todo' ? 'active' : '' %>">Активные</a>
         <a href="/?filter=done" class="<%= currentFilter === 'done' ? 'active' : '' %>">Завершенные</a>
     </div>
 
+    <!-- Задачи -->
     <div class="task-list">
-        <% if (tasks.length === 0) { %>
-            <p style="color: gray;">Задач пока нет...</p>
-        <% } %>
-
         <% tasks.forEach(task => { 
-            // Считаем просрочена ли задача (если не выполнена и дата меньше сегодня)
             const today = new Date().setHours(0,0,0,0);
             const taskDate = new Date(task.dueDate).getTime();
             const isOverdue = !task.completed && taskDate < today;
         %>
-            <div class="task <%= task.completed ? 'done' : '' %> <%= isOverdue ? 'overdue' : '' %>">
-                <strong><%= task.title %></strong>
-                
-                <% if (isOverdue) { %>
-                    <span class="overdue-label">⚠️ ПРОСРОЧЕНО!</span>
-                <% } %>
-
-                <div style="font-size: 0.85em; color: #555; margin-top: 5px;">
-                    Срок: <%= task.dueDate %>
+            <div class="task-card <%= task.completed ? 'done' : '' %> <%= isOverdue ? 'overdue-border' : '' %>">
+                <div class="task-header">
+                    <p class="task-title"><%= task.title %></p>
+                    <% if (isOverdue) { %>
+                        <span class="badge-overdue">Просрочено</span>
+                    <% } %>
                 </div>
+                
+                <div class="task-date">🗓 Срок: <%= new Date(task.dueDate).toLocaleDateString('ru-RU') %></div>
 
                 <% if (task.file) { %>
-                    <a href="/uploads/<%= task.file %>" target="_blank" class="file-link">📎 Прикрепленный файл</a>
+                    <a href="/uploads/<%= task.file %>" target="_blank" class="file-link">📎 Посмотреть вложение</a>
                 <% } %>
 
-                <form action="/toggle/<%= task.id %>" method="POST">
-                    <button type="submit" class="toggle-btn">
-                        <%= task.completed ? '↩️ Вернуть в работу' : '✅ Отметить как выполненную' %>
+                <form action="/toggle/<%= task.id %>" method="POST" style="margin: 0;">
+                    <button type="submit" class="status-btn">
+                        <% if (task.completed) { %>
+                            ⏪ Вернуть в работу
+                        <% } else { %>
+                            ✅ Отметить как выполненную
+                        <% } %>
                     </button>
                 </form>
             </div>
         <% }) %>
     </div>
+</div>
 
 </body>
 </html>
