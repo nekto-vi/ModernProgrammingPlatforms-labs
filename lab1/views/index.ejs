@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start; 
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .todo-container {
+            background: none; 
+            padding: 0;     
+            border: none;   
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .main-input {
+            width: 500px;        
+            padding: 12px 15px;  
+            font-size: 18px;      
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .main-input:focus {
+            border-color: #007bff;
+        }
+
+        .form-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+        }
+
+        .submit-btn {
+            width: fit-content;
+            padding: 8px 20px;
+            cursor: pointer;
+            background-color: #efefef;
+            border: 1px solid #767676;
+            border-radius: 3px;
+        }
+
+        .filters {
+            margin-top: 30px;
+            font-size: 14px;
+        }
+
+        .filters a {
+            text-decoration: none;
+            color: #0000ee;
+        }
+
+        .filters a:hover {
+            text-decoration: underline;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>📋 Список задач</h1>
+
+    <div class="todo-container">
+        <input type="text" class="main-input" placeholder="Что нужно сделать?">
+
+        <div class="form-row">
+            <label>Срок выполнения:</label>
+            <input type="date">
+        </div>
+
+        <div class="form-row">
+            <label>Прикрепить файл:</label>
+            <input type="file">
+        </div>
+
+        <button class="submit-btn">Создать задачу</button>
+    </div>
+
+    <div class="filters">
+        Фильтр: <a href="#">Все</a> | <a href="#">Только активные</a> | <a href="#">Завершенные</a>
+    </div>
+
+</body>
+</html>
