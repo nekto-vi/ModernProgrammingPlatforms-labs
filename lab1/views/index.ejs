@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <title>Список задач</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             padding: 40px;
             background-color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start; 
+            max-width: 800px;
+            margin: 0 auto;
         }
 
         h1 {
@@ -20,17 +20,18 @@
         }
 
         .todo-container {
-            background: none; 
-            padding: 0;     
-            border: none;   
-            width: 100%;
+            background: #f9f9f9; 
+            padding: 20px;     
+            border: 1px solid #eee;   
+            border-radius: 8px;
             display: flex;
             flex-direction: column;
             gap: 15px;
         }
 
         .main-input {
-            width: 500px;        
+            width: 100%;
+            box-sizing: border-box;        
             padding: 12px 15px;  
             font-size: 18px;      
             border: 1px solid #ccc;
@@ -51,51 +52,154 @@
 
         .submit-btn {
             width: fit-content;
-            padding: 8px 20px;
+            padding: 10px 25px;
             cursor: pointer;
-            background-color: #efefef;
-            border: 1px solid #767676;
-            border-radius: 3px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .submit-btn:hover {
+            background-color: #0056b3;
         }
 
         .filters {
             margin-top: 30px;
+            margin-bottom: 20px;
             font-size: 14px;
+            padding: 10px;
+            background: #f0f0f0;
+            border-radius: 5px;
         }
 
         .filters a {
             text-decoration: none;
             color: #0000ee;
+            margin: 0 5px;
         }
 
-        .filters a:hover {
-            text-decoration: underline;
+        .filters a.active {
+            font-weight: bold;
+            color: black;
+            text-decoration: none;
         }
 
+        /* Стили для карточек задач */
+        .task-list {
+            margin-top: 20px;
+        }
+
+        .task {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            position: relative;
+            transition: 0.2s;
+        }
+
+        .task.done {
+            background-color: #f8f9fa;
+            opacity: 0.7;
+        }
+
+        .task.done strong {
+            text-decoration: line-through;
+            color: #6c757d;
+        }
+
+        .overdue {
+            border: 2px solid #ff4d4d !important;
+            background-color: #fff5f5;
+        }
+
+        .overdue-label { 
+            color: #ff4d4d; 
+            font-weight: bold; 
+            font-size: 0.85em;
+            margin-left: 10px;
+        }
+
+        .file-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #17a2b8;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .toggle-btn {
+            margin-top: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background: white;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
 
     <h1>📋 Список задач</h1>
 
-    <div class="todo-container">
-        <input type="text" class="main-input" placeholder="Что нужно сделать?">
+    <form action="/add" method="POST" enctype="multipart/form-data" class="todo-container">
+        <input type="text" name="title" class="main-input" placeholder="Что нужно сделать?" required>
 
         <div class="form-row">
             <label>Срок выполнения:</label>
-            <input type="date">
+            <input type="date" name="dueDate" required>
         </div>
 
         <div class="form-row">
             <label>Прикрепить файл:</label>
-            <input type="file">
+            <input type="file" name="taskFile">
         </div>
 
-        <button class="submit-btn">Создать задачу</button>
-    </div>
+        <button type="submit" class="submit-btn">Создать задачу</button>
+    </form>
 
     <div class="filters">
-        Фильтр: <a href="#">Все</a> | <a href="#">Только активные</a> | <a href="#">Завершенные</a>
+        Фильтр: 
+        <a href="/" class="<%= !currentFilter ? 'active' : '' %>">Все</a> | 
+        <a href="/?filter=todo" class="<%= currentFilter === 'todo' ? 'active' : '' %>">Только активные</a> | 
+        <a href="/?filter=done" class="<%= currentFilter === 'done' ? 'active' : '' %>">Завершенные</a>
+    </div>
+
+    <div class="task-list">
+        <% if (tasks.length === 0) { %>
+            <p style="color: gray;">Задач пока нет...</p>
+        <% } %>
+
+        <% tasks.forEach(task => { 
+            // Считаем просрочена ли задача (если не выполнена и дата меньше сегодня)
+            const today = new Date().setHours(0,0,0,0);
+            const taskDate = new Date(task.dueDate).getTime();
+            const isOverdue = !task.completed && taskDate < today;
+        %>
+            <div class="task <%= task.completed ? 'done' : '' %> <%= isOverdue ? 'overdue' : '' %>">
+                <strong><%= task.title %></strong>
+                
+                <% if (isOverdue) { %>
+                    <span class="overdue-label">⚠️ ПРОСРОЧЕНО!</span>
+                <% } %>
+
+                <div style="font-size: 0.85em; color: #555; margin-top: 5px;">
+                    Срок: <%= task.dueDate %>
+                </div>
+
+                <% if (task.file) { %>
+                    <a href="/uploads/<%= task.file %>" target="_blank" class="file-link">📎 Прикрепленный файл</a>
+                <% } %>
+
+                <form action="/toggle/<%= task.id %>" method="POST">
+                    <button type="submit" class="toggle-btn">
+                        <%= task.completed ? '↩️ Вернуть в работу' : '✅ Отметить как выполненную' %>
+                    </button>
+                </form>
+            </div>
+        <% }) %>
     </div>
 
 </body>
