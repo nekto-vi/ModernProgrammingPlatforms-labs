@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Список задач</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Новая задача</h1>
+
+        <div id="errorMessage" class="error-alert" style="display: none;"></div>
+
+        <form id="taskForm" class="add-card">
+            <input type="text" id="titleInput" class="main-input" placeholder="Название новой задачи...">
+            
+            <div class="form-grid">
+                <div class="input-group">
+                    <label class="field-label">Срок выполнения</label>
+                    <input type="date" id="dateInput">
+                </div>
+                
+                <div class="input-group">
+                    <label class="field-label">Прикрепить файл</label>
+                    <div class="file-upload-container">
+                        <input type="file" id="fileInput" class="hidden-file-input" onchange="handleFileSelect(this)">
+                        
+                        <label for="fileInput" class="custom-file-label" id="filePlaceholder">
+                            <span>📎 Выбрать файл</span>
+                        </label>
+
+                        <div id="fileInfo" class="selected-file-info">
+                            <span class="file-name-text" id="fileName"></span>
+                            <button type="button" class="remove-file-btn" onclick="clearFileSelection()">×</button>
+                        </div>
+                    </div>
+                </div>
+            </div> 
+            
+            <button type="submit" class="submit-btn" id="submitBtn">Создать задачу</button>
+        </form>
+
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Все</button>
+            <button class="filter-btn" data-filter="todo">Активные</button>
+            <button class="filter-btn" data-filter="done">Выполненные</button>
+        </div>
+
+        <div id="taskList" class="task-list">
+            <div style="text-align:center; color: gray;">Загрузка задач...</div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
