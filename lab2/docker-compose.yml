@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  web-app:
+    build: .
+    container_name: spa-lab2
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./spa_tasks.db:/app/spa_tasks.db
+    restart: always
