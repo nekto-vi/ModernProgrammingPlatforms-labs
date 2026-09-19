@@ -135,6 +135,23 @@
             margin-top: 10px;
         }
 
+        /* --- СТИЛИ ДЛЯ ПАНЕЛИ ПОИСКА --- */
+        .search-container {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .search-container .main-input {
+            margin-bottom: 0; /* Убираем нижний отступ, чтобы кнопка стояла ровно */
+            flex-grow: 1; /* Инпут занимает всё свободное место */
+        }
+        .search-container .submit-btn {
+            margin-top: 0;
+            width: auto; /* Кнопка подстраивается под текст */
+            padding: 0 24px;
+        }
+        /* -------------------------------- */
+
         .filters {
             display: flex;
             gap: 8px;
@@ -226,6 +243,7 @@
 <div class="container">
     <h1>📋 Новая задача</h1>
 
+    <!-- Форма создания задачи -->
     <form action="/add" method="POST" enctype="multipart/form-data" class="add-card">
         <input type="text" name="title" class="main-input" placeholder="Название новой задачи..." required>
         
@@ -253,12 +271,19 @@
         <button type="submit" class="submit-btn">Создать задачу</button>
     </form>
 
+    <!-- Форма поиска с живым фильтром -->
+    <form action="/" method="GET" class="search-container">
+        <input type="text" id="searchInput" name="search" value="<%= searchQuery %>" placeholder="Поиск по названию..." class="main-input" oninput="liveSearch()">
+        <button type="submit" class="submit-btn">Найти</button>
+    </form>
+
     <div class="filters">
         <a href="/" class="<%= !currentFilter ? 'active' : '' %>">Все</a>
         <a href="/?filter=todo" class="<%= currentFilter === 'todo' ? 'active' : '' %>">Активные</a>
         <a href="/?filter=done" class="<%= currentFilter === 'done' ? 'active' : '' %>">Выполненные</a>
     </div>
 
+    <!-- Список задач -->
     <div class="task-list">
         <% tasks.forEach(task => { 
             const today = new Date().setHours(0,0,0,0);
@@ -286,12 +311,17 @@
                         <%= task.completed ? '⏪ Вернуть в работу' : '✅ Отметить как выполненную' %>
                     </button>
                 </form>
+
+                <form action="/delete/<%= task.id %>" method="POST" style="margin-top: 5px;">
+                    <button type="submit" class="status-btn" style="color: var(--danger);">🗑 Удалить задачу</button>
+                </form>
             </div>
         <% }) %>
     </div>
 </div>
 
 <script>
+    // Логика выбора файла
     function handleFileSelect(input) {
         if (input.files && input.files.length > 0) {
             document.getElementById('filePlaceholder').style.display = 'none';
@@ -299,10 +329,33 @@
             document.getElementById('fileName').textContent = '📎 ' + input.files[0].name;
         }
     }
+    
     function clearFileSelection() {
         document.getElementById('taskFile').value = '';
         document.getElementById('filePlaceholder').style.display = 'inline-flex';
         document.getElementById('fileInfo').style.display = 'none';
+    }
+
+    // ЛОГИКА ЖИВОГО ПОИСКА
+    function liveSearch() {
+        // Получаем введенный текст и переводим в нижний регистр
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        
+        // Получаем все карточки задач на странице
+        const cards = document.querySelectorAll('.task-card');
+
+        // Проходим по каждой карточке
+        cards.forEach(card => {
+            // Ищем заголовок внутри карточки и тоже переводим в нижний регистр
+            const title = card.querySelector('.task-title').textContent.toLowerCase();
+            
+            // Если текст из поиска есть в заголовке — показываем карточку, иначе прячем
+            if (title.includes(query)) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
     }
 </script>
 
