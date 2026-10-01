@@ -7,6 +7,6 @@ services:
     ports:
       - "3000:3000"
     volumes:
+      - ./data:/app/data
       - ./uploads:/app/uploads
-      - ./spa_tasks.db:/app/spa_tasks.db
     restart: always

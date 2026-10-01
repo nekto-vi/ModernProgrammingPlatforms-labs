@@ -13,12 +13,14 @@
         <div id="errorMessage" class="error-alert" style="display: none;"></div>
 
         <form id="taskForm" class="add-card">
-            <input type="text" id="titleInput" class="main-input" placeholder="Название новой задачи...">
+            <input type="text" id="titleInput" class="main-input" placeholder="Название новой задачи..." required>
             
+            <input type="text" id="commentInput" class="main-input" placeholder="Комментарий к задаче (необязательно)...">
+
             <div class="form-grid">
                 <div class="input-group">
                     <label class="field-label">Срок выполнения</label>
-                    <input type="date" id="dateInput">
+                    <input type="date" id="dateInput" required>
                 </div>
                 
                 <div class="input-group">
@@ -40,6 +42,16 @@
             
             <button type="submit" class="submit-btn" id="submitBtn">Создать задачу</button>
         </form>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Поиск по названию..." class="main-input" oninput="fetchTasks()">
+            
+            <select id="sortSelect" class="main-input custom-select" onchange="fetchTasks()">
+                <option value="created">Сначала новые</option>
+                <option value="oldest">Сначала старые</option>
+                <option value="date_asc">По дедлайну (ближайшие)</option>
+            </select>
+        </div>
 
         <div class="filters">
             <button class="filter-btn active" data-filter="all">Все</button>
