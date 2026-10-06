@@ -7,7 +7,45 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <section id="authPanel" class="auth-panel">
+        <h1>Вход в список задач</h1>
+        <p class="auth-copy">Введите email, чтобы получить одноразовую ссылку для входа или восстановления доступа.</p>
+        <form id="requestLinkForm">
+            <label class="field-label" for="authEmail">Email</label>
+            <input id="authEmail" name="email" class="main-input" type="email" autocomplete="email" required>
+            <button class="submit-btn" type="submit">Отправить ссылку</button>
+        </form>
+        <div id="authMessage" class="error-alert" role="status" aria-live="polite" hidden></div>
+    </section>
+
+    <div id="appPanel" hidden>
     <div class="container">
+        <div class="identity-bar">
+            <div><strong id="currentEmail"></strong><span id="currentRole" class="role-label"></span></div>
+            <button id="logoutBtn" class="secondary-btn" type="button">Выйти</button>
+        </div>
+
+        <section id="adminPanel" class="management-panel" hidden>
+            <h2>Пользователи</h2>
+            <form id="inviteForm" class="invite-form">
+                <input id="inviteEmail" class="main-input" type="email" placeholder="Email пользователя" required>
+                <select id="inviteRole" class="main-input custom-select" aria-label="Роль пользователя">
+                    <option value="reader">Читатель</option>
+                    <option value="editor">Редактор</option>
+                    <option value="admin">Администратор</option>
+                </select>
+                <button class="secondary-btn" type="submit">Пригласить</button>
+            </form>
+            <div id="usersList" class="management-list"></div>
+        </section>
+
+        <section class="management-panel sessions-panel">
+            <details>
+                <summary>Активные сессии</summary>
+                <div id="sessionsList" class="management-list"></div>
+            </details>
+        </section>
+
         <h1>📋 Новая задача</h1>
 
         <div id="errorMessage" class="error-alert" style="display: none;"></div>
@@ -62,6 +100,7 @@
         <div id="taskList" class="task-list">
             <div style="text-align:center; color: gray;">Загрузка задач...</div>
         </div>
+    </div>
     </div>
 
     <script src="app.js"></script>

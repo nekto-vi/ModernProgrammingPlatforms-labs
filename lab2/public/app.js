@@ -1,38 +1,152 @@
 let tasks = [];
 let currentFilter = 'all';
+let currentUser = null;
 
+const authPanel = document.getElementById('authPanel');
+const appPanel = document.getElementById('appPanel');
+const authMessage = document.getElementById('authMessage');
 const taskForm = document.getElementById('taskForm');
 const taskList = document.getElementById('taskList');
 const errorAlert = document.getElementById('errorMessage');
 const filterBtns = document.querySelectorAll('.filter-btn');
 
-async function fetchTasks() {
-    const searchVal = document.getElementById('searchInput') ? document.getElementById('searchInput').value : '';
-    const sortVal = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'created';
+function escapeHTML(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[character]));
+}
+
+function canWrite() {
+    return currentUser && ['admin', 'editor'].includes(currentUser.role);
+}
+
+async function apiRequest(url, options = {}) {
+    const response = await fetch(url, { credentials: 'same-origin', ...options });
+    const data = response.status === 204 ? null : await response.json().catch(() => null);
+    if (response.status === 401 && url !== '/api/auth/me') showAuth();
+    if (!response.ok) {
+        const error = new Error(data?.error?.message || 'Не удалось выполнить запрос.');
+        error.status = response.status;
+        error.code = data?.error?.code;
+        throw error;
+    }
+    return data;
+}
+
+function showAuth(message = '') {
+    currentUser = null;
+    appPanel.hidden = true;
+    authPanel.hidden = false;
+    authMessage.textContent = message;
+    authMessage.hidden = !message;
+}
+
+function showError(message) {
+    errorAlert.textContent = message;
+    errorAlert.style.display = 'block';
+    setTimeout(hideError, 4000);
+}
+
+function hideError() {
+    errorAlert.style.display = 'none';
+}
+
+async function initializeApp() {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (token) {
+        try {
+            await apiRequest('/api/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+            window.history.replaceState({}, '', window.location.pathname);
+        } catch (error) {
+            window.history.replaceState({}, '', window.location.pathname);
+            showAuth(error.message);
+            return;
+        }
+    }
 
     try {
-        const response = await fetch(`/api/tasks?search=${encodeURIComponent(searchVal)}&sort=${sortVal}`);
-        if (!response.ok) throw new Error('Ошибка при загрузке задач');
-        
-        tasks = await response.json();
-        renderTasks(); 
-    } catch (err) {
-        showError(err.message);
+        const { user } = await apiRequest('/api/auth/me');
+        currentUser = user;
+        authPanel.hidden = true;
+        appPanel.hidden = false;
+        document.getElementById('currentEmail').textContent = user.email;
+        document.getElementById('currentRole').textContent = {
+            admin: 'Администратор',
+            editor: 'Редактор',
+            reader: 'Читатель'
+        }[user.role] || user.role;
+        taskForm.hidden = !canWrite();
+        document.getElementById('adminPanel').hidden = user.role !== 'admin';
+        await Promise.all([fetchTasks(), fetchSessions()]);
+        if (user.role === 'admin') await fetchUsers();
+    } catch (error) {
+        if (error.status !== 401) showAuth(error.message);
     }
 }
 
-taskForm.addEventListener('submit', async (e) => {
-    e.preventDefault(); 
+document.getElementById('requestLinkForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    authMessage.hidden = true;
+    try {
+        const email = document.getElementById('authEmail').value;
+        const result = await apiRequest('/api/auth/request-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        authMessage.textContent = result.message;
+        authMessage.hidden = false;
+    } catch (error) {
+        authMessage.textContent = error.message;
+        authMessage.hidden = false;
+    }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    try {
+        await apiRequest('/api/auth/logout', { method: 'POST' });
+        showAuth('Вы вышли из системы.');
+    } catch (error) {
+        showError(error.message);
+    }
+});
+
+document.getElementById('inviteForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+        await apiRequest('/api/admin/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: document.getElementById('inviteEmail').value,
+                role: document.getElementById('inviteRole').value
+            })
+        });
+        event.target.reset();
+        showError('Приглашение отправлено.');
+        await fetchUsers();
+    } catch (error) {
+        showError(error.message);
+    }
+});
+
+document.getElementById('taskForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
     hideError();
 
     const title = document.getElementById('titleInput').value;
     const dueDate = document.getElementById('dateInput').value;
-    const comment = document.getElementById('commentInput') ? document.getElementById('commentInput').value : '';
+    const comment = document.getElementById('commentInput')?.value || '';
     const file = document.getElementById('fileInput').files[0];
-
-    if (!title.trim()) {
-        return showError('Пожалуйста, введите название задачи!');
-    }
+    if (!title.trim()) return showError('Пожалуйста, введите название задачи.');
 
     const formData = new FormData();
     formData.append('title', title);
@@ -41,206 +155,222 @@ taskForm.addEventListener('submit', async (e) => {
     if (file) formData.append('taskFile', file);
 
     try {
-        const response = await fetch('/api/tasks', {
-            method: 'POST',
-            body: formData 
-        });
-
-        const data = await response.json();
-
-        if (response.status === 201) {
-            taskForm.reset();    
-            clearFileSelection(); 
-            fetchTasks(); 
-        } else {
-            showError(data.error); 
-        }
-    } catch (err) {
-        showError('Ошибка сети');
+        await apiRequest('/api/tasks', { method: 'POST', body: formData });
+        event.target.reset();
+        clearFileSelection();
+        await fetchTasks();
+    } catch (error) {
+        showError(error.message);
     }
 });
 
-async function toggleTaskStatus(id, currentStatus) {
-    const newStatus = currentStatus === 1 ? 0 : 1;
-
+async function fetchTasks() {
+    const search = document.getElementById('searchInput')?.value || '';
+    const sort = document.getElementById('sortSelect')?.value || 'created';
     try {
-        const response = await fetch(`/api/tasks/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ completed: newStatus })
+        tasks = await apiRequest(`/api/tasks?search=${encodeURIComponent(search)}&sort=${encodeURIComponent(sort)}`);
+        renderTasks();
+    } catch (error) {
+        if (error.status !== 401) showError(error.message);
+    }
+}
+
+async function fetchUsers() {
+    try {
+        const users = await apiRequest('/api/admin/users');
+        const list = document.getElementById('usersList');
+        list.replaceChildren();
+        users.forEach((user) => {
+            const row = document.createElement('div');
+            row.className = 'management-row';
+            const identity = document.createElement('span');
+            identity.textContent = user.email;
+            const select = document.createElement('select');
+            select.className = 'main-input custom-select';
+            select.setAttribute('aria-label', `Роль: ${user.email}`);
+            [['reader', 'Читатель'], ['editor', 'Редактор'], ['admin', 'Администратор']].forEach(([role, label]) => {
+                const option = document.createElement('option');
+                option.value = role;
+                option.textContent = label;
+                option.selected = user.role === role;
+                select.append(option);
+            });
+            select.disabled = user.id === currentUser.id;
+            select.addEventListener('change', async () => {
+                try {
+                    await apiRequest(`/api/admin/users/${user.id}/role`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ role: select.value })
+                    });
+                    await fetchUsers();
+                } catch (error) {
+                    showError(error.message);
+                    await fetchUsers();
+                }
+            });
+            row.append(identity, select);
+            list.append(row);
         });
-
-        if (response.ok) {
-            fetchTasks();
-        } else {
-            const data = await response.json();
-            showError(data.error);
-        }
-    } catch (err) {
-        showError('Ошибка соединения с сервером');
+    } catch (error) {
+        showError(error.message);
     }
 }
 
-function startEditTask(id, currentTitle, currentDueDate, currentComment) {
-    const card = document.getElementById(`task-${id}`);
-    const titleContainer = card.querySelector('.title-container');
-    const dateContainer = card.querySelector('.task-date');
-    const commentContainer = card.querySelector('.task-comment') || document.createElement('div');
-
-    titleContainer.innerHTML = `
-        <input type="text" id="edit-title-${id}" class="main-input" value="${currentTitle.replace(/"/g, '&quot;')}" style="padding: 6px; font-size: 1rem; margin-bottom: 6px;">
-    `;
-    
-    dateContainer.innerHTML = `
-        🗓 Срок: <input type="date" id="edit-date-${id}" value="${currentDueDate || ''}" style="padding: 4px; border-radius: 6px; border: 1px solid var(--border);">
-    `;
-
-    commentContainer.innerHTML = `
-        💬 <input type="text" id="edit-comment-${id}" class="main-input" value="${(currentComment || '').replace(/"/g, '&quot;')}" placeholder="Добавить комментарий..." style="padding: 6px; font-size: 0.9rem; margin-top: 6px; margin-bottom: 0;">
-    `;
-    if (!card.querySelector('.task-comment')) {
-        card.insertBefore(commentContainer, card.querySelector('.status-btn').parentNode);
-    }
-    commentContainer.className = 'task-comment';
-
-    const editBtn = card.querySelector('.edit-btn-action');
-    editBtn.textContent = '💾 Сохранить';
-    editBtn.style.background = 'var(--primary)';
-    editBtn.style.color = 'white';
-}
-
-async function saveTaskFull(id) {
-    const newTitle = document.getElementById(`edit-title-${id}`).value;
-    const newDueDate = document.getElementById(`edit-date-${id}`).value;
-    const newComment = document.getElementById(`edit-comment-${id}`).value;
-
-    if (!newTitle.trim()) {
-        return showError('Название не может быть пустым!');
-    }
-
+async function fetchSessions() {
     try {
-        const response = await fetch(`/api/tasks/${id}/full`, {
+        const sessions = await apiRequest('/api/auth/sessions');
+        const list = document.getElementById('sessionsList');
+        list.replaceChildren();
+        sessions.forEach((session) => {
+            const row = document.createElement('div');
+            row.className = 'management-row';
+            const label = document.createElement('span');
+            const createdAt = new Date(session.createdAt).toLocaleString('ru');
+            label.textContent = `${session.userAgent || 'Устройство'} · ${createdAt}`;
+            const action = session.current
+                ? Object.assign(document.createElement('span'), { className: 'current-session', textContent: 'Текущая' })
+                : Object.assign(document.createElement('button'), { className: 'secondary-btn', textContent: 'Отозвать', type: 'button' });
+            if (!session.current) {
+                action.addEventListener('click', async () => {
+                    try {
+                        await apiRequest(`/api/auth/sessions/${session.id}`, { method: 'DELETE' });
+                        await fetchSessions();
+                    } catch (error) {
+                        showError(error.message);
+                    }
+                });
+            }
+            row.append(label, action);
+            list.append(row);
+        });
+    } catch (error) {
+        if (error.status !== 401) showError(error.message);
+    }
+}
+
+async function toggleTaskStatus(id, currentStatus) {
+    try {
+        await apiRequest(`/api/tasks/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: newTitle, dueDate: newDueDate, comment: newComment })
+            body: JSON.stringify({ completed: currentStatus === 1 ? 0 : 1 })
         });
+        await fetchTasks();
+    } catch (error) {
+        showError(error.message);
+    }
+}
 
-        if (response.ok) {
-            fetchTasks();
-        } else {
-            const data = await response.json();
-            showError(data.error);
-        }
-    } catch (err) {
-        showError('Ошибка при сохранении');
+function startEditTask(task) {
+    const card = document.getElementById(`task-${task.id}`);
+    card.querySelector('.title-container').innerHTML = `<input type="text" id="edit-title-${task.id}" class="main-input" value="${escapeHTML(task.title)}">`;
+    card.querySelector('.task-date').innerHTML = `Срок: <input type="date" id="edit-date-${task.id}" value="${escapeHTML(task.dueDate || '')}">`;
+    const comment = card.querySelector('.task-comment');
+    if (comment) comment.innerHTML = `Комментарий: <input type="text" id="edit-comment-${task.id}" class="main-input" value="${escapeHTML(task.comment || '')}">`;
+    else {
+        const newComment = document.createElement('div');
+        newComment.className = 'task-comment';
+        newComment.innerHTML = `Комментарий: <input type="text" id="edit-comment-${task.id}" class="main-input" value="">`;
+        card.insertBefore(newComment, card.querySelector('.task-actions'));
+    }
+    const editButton = card.querySelector('.edit-btn-action');
+    editButton.textContent = 'Сохранить';
+    editButton.dataset.editing = 'true';
+}
+
+async function saveTask(task) {
+    const title = document.getElementById(`edit-title-${task.id}`).value;
+    const dueDate = document.getElementById(`edit-date-${task.id}`).value;
+    const comment = document.getElementById(`edit-comment-${task.id}`).value;
+    if (!title.trim()) return showError('Название не может быть пустым.');
+
+    try {
+        await apiRequest(`/api/tasks/${task.id}/full`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, dueDate, comment })
+        });
+        await fetchTasks();
+    } catch (error) {
+        showError(error.message);
     }
 }
 
 async function deleteTask(id) {
     if (!confirm('Вы уверены, что хотите удалить задачу?')) return;
-
     try {
-        const response = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-
-        if (response.ok) {
-            fetchTasks();
-        } else {
-            const data = await response.json();
-            showError(data.error);
-        }
-    } catch (err) {
-        showError('Ошибка при удалении');
+        await apiRequest(`/api/tasks/${id}`, { method: 'DELETE' });
+        await fetchTasks();
+    } catch (error) {
+        showError(error.message);
     }
 }
 
 function renderTasks() {
-    taskList.innerHTML = ''; 
-
+    taskList.replaceChildren();
     let filteredTasks = tasks;
-    if (currentFilter === 'todo') filteredTasks = tasks.filter(t => t.completed === 0);
-    if (currentFilter === 'done') filteredTasks = tasks.filter(t => t.completed === 1);
+    if (currentFilter === 'todo') filteredTasks = tasks.filter((task) => task.completed === 0);
+    if (currentFilter === 'done') filteredTasks = tasks.filter((task) => task.completed === 1);
 
-    if (filteredTasks.length === 0) {
-        taskList.innerHTML = '<div style="text-align:center; color: gray;">Задач нет</div>';
+    if (!filteredTasks.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Задач нет';
+        taskList.append(empty);
         return;
     }
 
-    filteredTasks.forEach(task => {
-        const isOverdue = task.completed === 0 && task.dueDate && new Date(task.dueDate).setHours(0,0,0,0) < new Date().setHours(0,0,0,0);
-        
-        const div = document.createElement('div');
-        div.id = `task-${task.id}`;
-        div.className = `task-card ${task.completed ? 'done' : ''} ${isOverdue ? 'overdue-border' : ''}`;
-        
-        div.innerHTML = `
+    filteredTasks.forEach((task) => {
+        const isOverdue = task.completed === 0 && task.dueDate &&
+            new Date(task.dueDate).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0);
+        const card = document.createElement('article');
+        card.id = `task-${task.id}`;
+        card.className = `task-card ${task.completed ? 'done' : ''} ${isOverdue ? 'overdue-border' : ''}`;
+        card.innerHTML = `
             <div class="task-header">
-                <div class="title-container" style="flex-grow: 1;">
-                    <p class="task-title">${task.title}</p>
-                </div>
+                <div class="title-container"><p class="task-title">${escapeHTML(task.title)}</p></div>
                 ${isOverdue ? '<span class="badge-overdue">Просрочено</span>' : ''}
             </div>
-            
-            <div class="task-date">🗓 Срок: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString('ru') : 'Нет даты'}</div>
-            
-            ${task.comment ? `<div class="task-comment" style="font-size: 0.9rem; color: var(--text-muted);">💬 ${task.comment}</div>` : ''}
-
-            ${task.filename ? `<a href="/uploads/${task.filename}" target="_blank" class="file-link">📎 Посмотреть файл</a>` : ''}
-            
-            <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
-                <button class="status-btn toggle-btn" style="flex: 1;">
-                    ${task.completed ? '⏪ Вернуть' : '✅ Выполнить'}
-                </button>
-                <button class="status-btn edit-btn-action" style="flex: 1;">
-                    ✏️ Изменить
-                </button>
-                <button class="status-btn delete-btn" style="color: red; flex: 1;">
-                    🗑 Удалить
-                </button>
-            </div>
+            <div class="task-date">Срок: ${task.dueDate ? escapeHTML(new Date(task.dueDate).toLocaleDateString('ru')) : 'Нет даты'}</div>
+            ${task.comment ? `<div class="task-comment">Комментарий: ${escapeHTML(task.comment)}</div>` : ''}
+            ${task.filename ? `<a href="/uploads/${encodeURIComponent(task.filename)}" class="file-link">Скачать файл</a>` : ''}
         `;
-
-        div.querySelector('.toggle-btn').addEventListener('click', () => toggleTaskStatus(task.id, task.completed));
-        div.querySelector('.delete-btn').addEventListener('click', () => deleteTask(task.id));
-        
-        const editBtn = div.querySelector('.edit-btn-action');
-        editBtn.addEventListener('click', () => {
-            if (editBtn.textContent.includes('Изменить')) {
-                startEditTask(task.id, task.title, task.dueDate || '', task.comment || '');
-            } else {
-                saveTaskFull(task.id);
-            }
-        });
-
-        taskList.appendChild(div);
+        if (canWrite()) {
+            const actions = document.createElement('div');
+            actions.className = 'task-actions';
+            actions.innerHTML = `
+                <button class="status-btn toggle-btn" type="button">${task.completed ? 'Вернуть' : 'Выполнить'}</button>
+                <button class="status-btn edit-btn-action" type="button">Изменить</button>
+                <button class="status-btn delete-btn" type="button">Удалить</button>
+            `;
+            actions.querySelector('.toggle-btn').addEventListener('click', () => toggleTaskStatus(task.id, task.completed));
+            actions.querySelector('.delete-btn').addEventListener('click', () => deleteTask(task.id));
+            actions.querySelector('.edit-btn-action').addEventListener('click', (event) => {
+                if (event.currentTarget.dataset.editing) saveTask(task);
+                else startEditTask(task);
+            });
+            card.append(actions);
+        }
+        taskList.append(card);
     });
 }
 
-filterBtns.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        filterBtns.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        
-        currentFilter = e.target.dataset.filter;
-        renderTasks();
-    });
-});
+filterBtns.forEach((button) => button.addEventListener('click', (event) => {
+    filterBtns.forEach((item) => item.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    currentFilter = event.currentTarget.dataset.filter;
+    renderTasks();
+}));
 
-function showError(msg) {
-    errorAlert.textContent = msg;
-    errorAlert.style.display = 'block';
-    setTimeout(hideError, 4000); 
-}
-
-function hideError() {
-    errorAlert.style.display = 'none';
-}
+document.getElementById('searchInput').addEventListener('input', fetchTasks);
+document.getElementById('sortSelect').addEventListener('change', fetchTasks);
 
 function handleFileSelect(input) {
-    if (input.files && input.files.length > 0) {
-        document.getElementById('filePlaceholder').style.display = 'none';
-        document.getElementById('fileInfo').style.display = 'flex';
-        document.getElementById('fileName').textContent = '📎 ' + input.files[0].name;
-    }
+    if (!input.files?.length) return;
+    document.getElementById('filePlaceholder').style.display = 'none';
+    document.getElementById('fileInfo').style.display = 'flex';
+    document.getElementById('fileName').textContent = input.files[0].name;
 }
 
 function clearFileSelection() {
@@ -249,4 +379,6 @@ function clearFileSelection() {
     document.getElementById('fileInfo').style.display = 'none';
 }
 
-fetchTasks();
+window.handleFileSelect = handleFileSelect;
+window.clearFileSelection = clearFileSelection;
+initializeApp();

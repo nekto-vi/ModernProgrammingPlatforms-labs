@@ -3,3 +3,8 @@ node_modules
 Dockerfile
 .git
 spa_tasks.db
+.env
+.env.*
+!.env.example
+data/
+uploads/
