@@ -25,80 +25,83 @@
             <button id="logoutBtn" class="secondary-btn" type="button">Выйти</button>
         </div>
 
-        <section id="adminPanel" class="management-panel" hidden>
-            <h2>Пользователи</h2>
-            <form id="inviteForm" class="invite-form">
-                <input id="inviteEmail" class="main-input" type="email" placeholder="Email пользователя" required>
-                <select id="inviteRole" class="main-input custom-select" aria-label="Роль пользователя">
-                    <option value="reader">Читатель</option>
-                    <option value="editor">Редактор</option>
-                    <option value="admin">Администратор</option>
-                </select>
-                <button class="secondary-btn" type="submit">Пригласить</button>
-            </form>
-            <div id="usersList" class="management-list"></div>
-        </section>
+        <div class="workspace-layout">
+            <aside class="workspace-sidebar" aria-label="Управление">
+                <section id="adminPanel" class="management-panel" hidden>
+                    <details>
+                        <summary>Пользователи</summary>
+                        <div class="management-content">
+                            <form id="inviteForm" class="invite-form">
+                                <input id="inviteEmail" class="main-input" type="email" placeholder="Email пользователя" required>
+                                <select id="inviteRole" class="main-input custom-select" aria-label="Роль пользователя">
+                                    <option value="reader">Читатель</option>
+                                    <option value="editor">Редактор</option>
+                                    <option value="admin">Администратор</option>
+                                </select>
+                                <button class="secondary-btn" type="submit">Пригласить</button>
+                            </form>
+                            <div id="usersList" class="management-list"></div>
+                        </div>
+                    </details>
+                </section>
 
-        <section class="management-panel sessions-panel">
-            <details>
-                <summary>Активные сессии</summary>
-                <div id="sessionsList" class="management-list"></div>
-            </details>
-        </section>
+                <section class="management-panel sessions-panel">
+                    <details>
+                        <summary>Активные сессии</summary>
+                        <div id="sessionsList" class="management-list"></div>
+                    </details>
+                </section>
+            </aside>
 
-        <h1>📋 Новая задача</h1>
+            <main class="workspace-main">
+                <h1>📋 Новая задача</h1>
+                <div id="errorMessage" class="error-alert" style="display: none;"></div>
 
-        <div id="errorMessage" class="error-alert" style="display: none;"></div>
+                <form id="taskForm" class="add-card">
+                    <input type="text" id="titleInput" class="main-input" placeholder="Название новой задачи..." required>
+                    <input type="text" id="commentInput" class="main-input" placeholder="Комментарий к задаче (необязательно)...">
 
-        <form id="taskForm" class="add-card">
-            <input type="text" id="titleInput" class="main-input" placeholder="Название новой задачи..." required>
-            
-            <input type="text" id="commentInput" class="main-input" placeholder="Комментарий к задаче (необязательно)...">
-
-            <div class="form-grid">
-                <div class="input-group">
-                    <label class="field-label">Срок выполнения</label>
-                    <input type="date" id="dateInput" required>
-                </div>
-                
-                <div class="input-group">
-                    <label class="field-label">Прикрепить файл</label>
-                    <div class="file-upload-container">
-                        <input type="file" id="fileInput" class="hidden-file-input" onchange="handleFileSelect(this)">
-                        
-                        <label for="fileInput" class="custom-file-label" id="filePlaceholder">
-                            <span>📎 Выбрать файл</span>
-                        </label>
-
-                        <div id="fileInfo" class="selected-file-info">
-                            <span class="file-name-text" id="fileName"></span>
-                            <button type="button" class="remove-file-btn" onclick="clearFileSelection()">×</button>
+                    <div class="form-grid">
+                        <div class="input-group">
+                            <label class="field-label" for="dateInput">Срок выполнения</label>
+                            <input type="date" id="dateInput" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="field-label" for="fileInput">Прикрепить файл</label>
+                            <div class="file-upload-container">
+                                <input type="file" id="fileInput" class="hidden-file-input" onchange="handleFileSelect(this)">
+                                <label for="fileInput" class="custom-file-label" id="filePlaceholder">
+                                    <span>📎 Выбрать файл</span>
+                                </label>
+                                <div id="fileInfo" class="selected-file-info">
+                                    <span class="file-name-text" id="fileName"></span>
+                                    <button type="button" class="remove-file-btn" onclick="clearFileSelection()">×</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <button type="submit" class="submit-btn" id="submitBtn">Создать задачу</button>
+                </form>
+
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Поиск по названию..." class="main-input" oninput="fetchTasks()">
+                    <select id="sortSelect" class="main-input custom-select" onchange="fetchTasks()">
+                        <option value="created">Сначала новые</option>
+                        <option value="oldest">Сначала старые</option>
+                        <option value="date_asc">По дедлайну (ближайшие)</option>
+                    </select>
                 </div>
-            </div> 
-            
-            <button type="submit" class="submit-btn" id="submitBtn">Создать задачу</button>
-        </form>
 
-        <div class="search-container">
-            <input type="text" id="searchInput" placeholder="Поиск по названию..." class="main-input" oninput="fetchTasks()">
-            
-            <select id="sortSelect" class="main-input custom-select" onchange="fetchTasks()">
-                <option value="created">Сначала новые</option>
-                <option value="oldest">Сначала старые</option>
-                <option value="date_asc">По дедлайну (ближайшие)</option>
-            </select>
-        </div>
+                <div class="filters">
+                    <button class="filter-btn active" data-filter="all">Все</button>
+                    <button class="filter-btn" data-filter="todo">Активные</button>
+                    <button class="filter-btn" data-filter="done">Выполненные</button>
+                </div>
 
-        <div class="filters">
-            <button class="filter-btn active" data-filter="all">Все</button>
-            <button class="filter-btn" data-filter="todo">Активные</button>
-            <button class="filter-btn" data-filter="done">Выполненные</button>
-        </div>
-
-        <div id="taskList" class="task-list">
-            <div style="text-align:center; color: gray;">Загрузка задач...</div>
+                <div id="taskList" class="task-list">
+                    <div style="text-align:center; color: gray;">Загрузка задач...</div>
+                </div>
+            </main>
         </div>
     </div>
     </div>
