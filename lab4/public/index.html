@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#ffffff">
+    <title>Морской бой</title>
+    <link rel="stylesheet" href="/style.css?v=4">
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="/">Морской бой</a>
+            <div id="connectionBadge" class="connection-badge" role="status">
+                <span class="connection-dot"></span><span id="connectionText">Подключение...</span>
+            </div>
+        </header>
+
+        <section id="lobbyView" class="lobby-view">
+            <div class="lobby-card">
+                <h1>Новая игра</h1>
+                <p class="muted">Создай комнату или введи код, который прислал соперник.</p>
+                <label for="playerName">Твоё имя</label>
+                <input id="playerName" maxlength="24" placeholder="Например, Алекс" autocomplete="nickname">
+                <button id="createButton" class="button button-primary" type="button">Создать комнату</button>
+                <div class="separator">или присоединиться</div>
+                <div class="join-row">
+                    <input id="roomCode" maxlength="6" placeholder="Код комнаты" autocomplete="off" aria-label="Код комнаты">
+                    <button id="joinButton" class="button" type="button">Войти</button>
+                </div>
+                <p id="lobbyMessage" class="message" role="status" aria-live="polite"></p>
+            </div>
+        </section>
+
+        <section id="gameView" class="game-view" hidden>
+            <div class="game-heading">
+                <div>
+                    <div class="room-line">Комната <strong id="roomLabel">------</strong>
+                        <button id="copyCodeButton" class="link-button" type="button">Скопировать код</button>
+                    </div>
+                    <h1 id="gameTitle">Расставь корабли</h1>
+                    <p id="gameSubtitle" class="muted">Выбери корабль и нажми на клетку поля, чтобы разместить его.</p>
+                </div>
+                <button id="backButton" class="button button-small" type="button">В меню</button>
+            </div>
+
+            <div class="player-strip">
+                <div><strong id="playerOneName">Игрок 1</strong><span id="playerOneStatus">Расставляет корабли</span></div>
+                <span class="versus">—</span>
+                <div><strong id="playerTwoName">Ожидание игрока</strong><span id="playerTwoStatus">Не в комнате</span></div>
+                <span id="turnPill" class="turn-pill">РАССТАНОВКА</span>
+            </div>
+
+            <section id="setupPanel" class="setup-layout">
+                <div class="setup-boards">
+                    <div class="board-panel">
+                        <div class="board-heading"><h2>Моё поле</h2><span>Твои корабли</span></div>
+                        <div id="ownBoard" class="board own-board" aria-label="Твоё поле для расстановки кораблей"></div>
+                        <p class="board-note">Проведи по клеткам линию нужной длины.</p>
+                    </div>
+                    <div class="board-panel">
+                        <div class="board-heading"><h2>Поле соперника</h2><span id="opponentBoardLabel">Ожидание игрока</span></div>
+                        <div id="setupEnemyBoard" class="board opponent-board" aria-label="Поле соперника"></div>
+                        <p class="board-note">Поле соперника пока закрыто.</p>
+                    </div>
+                </div>
+                <aside class="setup-controls">
+                    <div class="control-heading">
+                        <h2>Твой флот</h2>
+                        <span id="fleetProgress" class="fleet-progress">0 / 10</span>
+                    </div>
+                    <p class="muted compact">Выбери корабль и протяни по полю. Можно повернуть.</p>
+                    <div id="shipChoices" class="ship-choices" aria-label="Выбор корабля"></div>
+                    <button id="orientationButton" class="button rotate-button" type="button" aria-pressed="false">Повернуть · ↻</button>
+                    <div class="setup-actions">
+                        <button id="undoButton" class="button" type="button">Убрать последний</button>
+                        <button id="readyButton" class="button button-primary" type="button" disabled>Готово</button>
+                    </div>
+                    <p id="gameMessage" class="message" role="status" aria-live="polite"></p>
+                </aside>
+            </section>
+
+            <section id="playPanel" class="boards" hidden>
+                <div class="board-panel">
+                    <div class="board-heading"><h2>Моё поле</h2><span>Твои корабли</span></div>
+                    <div id="playOwnBoard" class="board own-board" aria-label="Твоё игровое поле"></div>
+                </div>
+                <div class="board-panel">
+                    <div class="board-heading"><h2>Поле соперника</h2><span>Выбери клетку для выстрела</span></div>
+                    <div id="targetBoard" class="board target-board" aria-label="Поле соперника"></div>
+                </div>
+                <p id="playMessage" class="play-message" role="status" aria-live="polite"></p>
+            </section>
+        </section>
+
+    </main>
+    <script src="/app.js?v=4"></script>
+</body>
+</html>

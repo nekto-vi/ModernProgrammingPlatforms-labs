@@ -1,0 +1,15 @@
+{
+  "name": "lab4-sea-battle",
+  "version": "1.0.0",
+  "description": "Realtime multiplayer cell-based Sea Battle game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}
