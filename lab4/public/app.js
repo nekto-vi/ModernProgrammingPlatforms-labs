@@ -359,10 +359,10 @@ function renderGame(state) {
     }
 
     document.querySelector('#gameTitle').textContent = state.status === 'finished'
-        ? (state.winner === state.playerIndex ? 'Ты победила!' : 'Партия окончена')
+        ? (state.winner === state.playerIndex ? 'Победа!' : 'Партия окончена')
         : yourTurn ? 'Твой ход' : 'Ход соперника';
     document.querySelector('#gameSubtitle').textContent = state.status === 'finished'
-        ? (state.winner === state.playerIndex ? 'Ты нашла все клетки флота соперника.' : 'Соперник нашёл все клетки твоего флота.')
+        ? (state.winner === state.playerIndex ? ' Все клетки флота соперника были обнаружены.' : 'Соперник нашёл все клетки твоего флота.')
         : yourTurn ? 'Выбери клетку на поле соперника.' : 'Жди выстрела соперника.';
     document.querySelector('#turnPill').textContent = state.status === 'finished'
         ? 'ИГРА ОКОНЧЕНА'
