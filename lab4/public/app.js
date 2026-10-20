@@ -8,14 +8,23 @@ const gameMessage = document.querySelector('#gameMessage');
 const connectionBadge = document.querySelector('#connectionBadge');
 const connectionText = document.querySelector('#connectionText');
 const playerIdKey = 'cellBattlePlayerId';
+const playerNameKey = 'cellBattlePlayerName';
+const roomKey = 'cellBattleRoomId';
 const playerId = localStorage.getItem(playerIdKey) || crypto.randomUUID();
 localStorage.setItem(playerIdKey, playerId);
+const restoredName = localStorage.getItem(playerNameKey) || '';
+const roomFromUrl = new URLSearchParams(location.search).get('room')?.trim().toUpperCase() || '';
+const savedRoom = localStorage.getItem(roomKey) || '';
+if (restoredName) nameInput.value = restoredName;
+if (roomFromUrl || savedRoom) roomCodeInput.value = roomFromUrl || savedRoom;
 
 let socket;
 let queuedCommand;
 let reconnectTimeout;
 let retryDelay = 600;
-let currentRoom;
+let currentRoom = restoredName && /^[A-Z0-9]{6}$/.test(roomFromUrl)
+    ? roomFromUrl
+    : /^[A-Z0-9]{6}$/.test(savedRoom) && restoredName ? savedRoom : null;
 let currentState;
 let selectedLength = 4;
 let vertical = false;
@@ -47,12 +56,25 @@ function connect() {
         const message = JSON.parse(event.data);
         if (message.type === 'error') {
             pendingPlacement = false;
-            showMessage(message.message, true);
+            if (message.code === 'conflict' && message.state) {
+                currentState = message.state;
+                currentRoom = message.state.roomId;
+            }
+            if (message.code === 'room_unavailable') {
+                clearSavedRoom();
+                currentRoom = null;
+                currentState = null;
+                gameView.hidden = true;
+                lobbyView.hidden = false;
+                lobbyMessage.textContent = message.message;
+            }
             if (currentState) renderGame(currentState);
+            else if (message.code !== 'room_unavailable') showMessage(message.message, true);
         } else if (message.type === 'state') {
             currentRoom = message.roomId;
             currentState = message;
             pendingPlacement = false;
+            saveRoom(currentRoom);
             renderGame(message);
         }
     });
@@ -62,6 +84,21 @@ function connect() {
         retryDelay = Math.min(retryDelay * 1.7, 6000);
     });
     socket.addEventListener('error', () => socket.close());
+}
+
+function saveRoom(roomId) {
+    localStorage.setItem(roomKey, roomId);
+    localStorage.setItem(playerNameKey, nameInput.value.trim());
+    const url = new URL(location.href);
+    url.searchParams.set('room', roomId);
+    history.replaceState(null, '', url);
+}
+
+function clearSavedRoom() {
+    localStorage.removeItem(roomKey);
+    const url = new URL(location.href);
+    url.searchParams.delete('room');
+    history.replaceState(null, '', url);
 }
 
 function send(command) {
@@ -89,6 +126,12 @@ function startRoom(type) {
         return;
     }
     lobbyMessage.textContent = '';
+    localStorage.setItem(playerNameKey, name);
+    if (type === 'create') {
+        currentRoom = null;
+        currentState = null;
+        clearSavedRoom();
+    }
     send({ type, name, playerId, roomId: roomCodeInput.value.trim().toUpperCase() });
 }
 
@@ -233,7 +276,15 @@ function finishPlacement() {
         cell.classList.remove('preview-valid', 'preview-invalid');
     }
     showMessage('Сохраняю расстановку...');
-    send({ type: 'placement', ships: [...currentState.ownShips, preview.cells] });
+    savePlacement([...currentState.ownShips, preview.cells]);
+}
+
+function savePlacement(ships) {
+    send({
+        type: 'placement',
+        ships,
+        placementVersion: currentState.placementVersion
+    });
 }
 
 function renderBoard(element, kind, state) {
@@ -345,7 +396,7 @@ document.querySelector('#undoButton').addEventListener('click', () => {
     if (!currentState?.ownShips.length || pendingPlacement) return;
     pendingPlacement = true;
     showMessage('Обновляю расстановку...');
-    send({ type: 'placement', ships: currentState.ownShips.slice(0, -1) });
+    savePlacement(currentState.ownShips.slice(0, -1));
 });
 document.querySelector('#readyButton').addEventListener('click', () => {
     showMessage('Отправляю готовность...');
@@ -353,9 +404,9 @@ document.querySelector('#readyButton').addEventListener('click', () => {
 });
 document.querySelector('#copyCodeButton').addEventListener('click', async () => {
     try {
-        await navigator.clipboard.writeText(currentRoom);
-        document.querySelector('#copyCodeButton').textContent = 'Скопировано';
-        setTimeout(() => { document.querySelector('#copyCodeButton').textContent = 'Скопировать код'; }, 1600);
+        await navigator.clipboard.writeText(new URL(`?room=${encodeURIComponent(currentRoom)}`, location.href).href);
+        document.querySelector('#copyCodeButton').textContent = 'Ссылка скопирована';
+        setTimeout(() => { document.querySelector('#copyCodeButton').textContent = 'Скопировать ссылку'; }, 1600);
     } catch (error) {
         showMessage(`Не удалось скопировать код: ${error.message}`, true);
     }
@@ -363,6 +414,8 @@ document.querySelector('#copyCodeButton').addEventListener('click', async () => 
 document.querySelector('#backButton').addEventListener('click', () => {
     currentRoom = null;
     currentState = null;
+    clearSavedRoom();
+    roomCodeInput.value = '';
     gameView.hidden = true;
     lobbyView.hidden = false;
     lobbyMessage.textContent = '';
@@ -378,4 +431,8 @@ window.addEventListener('online', () => {
 });
 window.addEventListener('beforeunload', () => socket?.close());
 
+if (currentRoom && restoredName) {
+    lobbyView.hidden = true;
+    gameView.hidden = false;
+}
 connect();

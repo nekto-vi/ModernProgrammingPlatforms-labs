@@ -79,7 +79,7 @@ function validateFleet(ships, complete = false) {
 }
 
 function createPlayer(id, name) {
-    return { id, name, ships: [], shots: [], ready: false };
+    return { id, name, ships: [], shots: [], ready: false, placementVersion: 0 };
 }
 
 function roomCode() {
@@ -103,6 +103,7 @@ function roomView(room, playerIndex) {
         playerIndex,
         players: room.players.map((player) => player ? player.name : null),
         ready: room.players.map((player) => Boolean(player?.ready)),
+        placementVersion: ownPlayer.placementVersion || 0,
         ownShips: ownPlayer.ships,
         incomingShots: enemy ? enemy.shots : [],
         outgoingShots: ownPlayer.shots
@@ -116,6 +117,9 @@ function sendJson(socket, message) {
 function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logger = console.error } = {}) {
     const rooms = loadRooms(dataFile);
     for (const room of Object.values(rooms)) {
+        for (const player of room.players) {
+            if (player && !Number.isSafeInteger(player.placementVersion)) player.placementVersion = 0;
+        }
         if (room.status === 'waiting') {
             room.status = 'setup';
             for (const player of room.players) {
@@ -143,8 +147,8 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
         }
     }
 
-    function fail(socket, message) {
-        sendJson(socket, { type: 'error', message });
+    function fail(socket, message, details = {}) {
+        sendJson(socket, { type: 'error', message, ...details });
     }
 
     function joinRoom(socket, command) {
@@ -174,7 +178,7 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
             const id = typeof command.roomId === 'string' ? command.roomId.trim().toUpperCase() : '';
             room = rooms[id];
             if (!room) {
-                fail(socket, 'Комната не найдена. Проверьте код и попробуйте снова.');
+                fail(socket, 'Комната не найдена. Проверьте код и попробуйте снова.', { code: 'room_unavailable' });
                 return;
             }
 
@@ -182,7 +186,7 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
             if (playerIndex < 0) {
                 playerIndex = room.players.findIndex((player) => player === null);
                 if (playerIndex < 0 || room.status !== 'setup') {
-                    fail(socket, 'В этой комнате уже началась игра.');
+                    fail(socket, 'В этой комнате уже началась игра или нет свободного места.', { code: 'room_unavailable' });
                     return;
                 }
                 room.players[playerIndex] = createPlayer(playerId, name);
@@ -209,11 +213,20 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
             fail(socket, 'Расстановку уже нельзя изменить.');
             return;
         }
+        if (!Number.isSafeInteger(command.placementVersion)
+            || command.placementVersion !== player.placementVersion) {
+            fail(socket, 'Конфликт изменений: другая вкладка уже сохранила более новую расстановку. Показана актуальная версия; повтори действие, если оно всё ещё нужно.', {
+                code: 'conflict',
+                state: roomView(room, socket.playerIndex)
+            });
+            return;
+        }
         if (!validateFleet(command.ships)) {
             fail(socket, 'Расстановка некорректна: корабли должны быть прямыми и не должны пересекаться или соприкасаться.');
             return;
         }
         player.ships = command.ships;
+        player.placementVersion += 1;
         persist();
         broadcast(room);
     }
@@ -247,7 +260,10 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
             return;
         }
         if (room.turn !== socket.playerIndex) {
-            fail(socket, 'Сейчас ход соперника.');
+            fail(socket, 'Сейчас ход соперника. Получено актуальное состояние игры.', {
+                code: 'conflict',
+                state: roomView(room, socket.playerIndex)
+            });
             return;
         }
         const { x, y } = command;
@@ -257,7 +273,10 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
         }
         const player = room.players[socket.playerIndex];
         if (player.shots.some((shot) => shot.x === x && shot.y === y)) {
-            fail(socket, 'Вы уже стреляли в эту клетку.');
+            fail(socket, 'Конфликт ходов: в эту клетку уже выстрелили. Показано актуальное состояние игры.', {
+                code: 'conflict',
+                state: roomView(room, socket.playerIndex)
+            });
             return;
         }
 
