@@ -27,6 +27,7 @@ function loadRooms(filePath = ROOMS_FILE) {
     return rooms;
 }
 
+// функция атомарного сохранения данных в файл
 function saveRooms(rooms, filePath = ROOMS_FILE) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const temporaryPath = `${filePath}.tmp`;
@@ -78,6 +79,65 @@ function validateFleet(ships, complete = false) {
     return !complete || [...FLEET_COUNTS].every(([length, count]) => counts.get(length) === count);
 }
 
+function generateRandomFleet() {
+    const fleet = [4, 3, 3, 2, 2, 2, 1, 1, 1, 1];
+    const candidatesByLength = new Map();
+    for (const length of new Set(fleet)) {
+        const candidates = [];
+        for (let y = 0; y < BOARD_SIZE; y += 1) {
+            for (let x = 0; x < BOARD_SIZE; x += 1) {
+                for (const [stepX, stepY] of length === 1 ? [[1, 0]] : [[1, 0], [0, 1]]) {
+                    const endX = x + stepX * (length - 1);
+                    const endY = y + stepY * (length - 1);
+                    if (endX >= BOARD_SIZE || endY >= BOARD_SIZE) continue;
+                    candidates.push(Array.from({ length }, (_, index) => ({
+                        x: x + stepX * index,
+                        y: y + stepY * index
+                    })));
+                }
+            }
+        }
+        candidatesByLength.set(length, candidates);
+    }
+
+    const blocked = Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(0));
+    const ships = [];
+
+    function placeShip(shipIndex) {
+        if (shipIndex === fleet.length) return true;
+        const candidates = [...candidatesByLength.get(fleet[shipIndex])];
+        for (let index = candidates.length - 1; index > 0; index -= 1) {
+            const swapIndex = randomInt(index + 1);
+            [candidates[index], candidates[swapIndex]] = [candidates[swapIndex], candidates[index]];
+        }
+
+        for (const candidate of candidates) {
+            if (candidate.some(({ x, y }) => blocked[y][x] > 0)) continue;
+            for (const { x, y } of candidate) {
+                for (let neighborY = Math.max(0, y - 1); neighborY <= Math.min(BOARD_SIZE - 1, y + 1); neighborY += 1) {
+                    for (let neighborX = Math.max(0, x - 1); neighborX <= Math.min(BOARD_SIZE - 1, x + 1); neighborX += 1) {
+                        blocked[neighborY][neighborX] += 1;
+                    }
+                }
+            }
+            ships.push(candidate);
+            if (placeShip(shipIndex + 1)) return true;
+            ships.pop();
+            for (const { x, y } of candidate) {
+                for (let neighborY = Math.max(0, y - 1); neighborY <= Math.min(BOARD_SIZE - 1, y + 1); neighborY += 1) {
+                    for (let neighborX = Math.max(0, x - 1); neighborX <= Math.min(BOARD_SIZE - 1, x + 1); neighborX += 1) {
+                        blocked[neighborY][neighborX] -= 1;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    if (!placeShip(0)) throw new Error('Could not generate a valid random fleet.');
+    return ships;
+}
+
 function createPlayer(id, name) {
     return { id, name, ships: [], shots: [], ready: false, placementVersion: 0 };
 }
@@ -100,6 +160,7 @@ function roomView(room, playerIndex) {
         status: room.status,
         turn: room.turn,
         winner: room.winner,
+        rematchReady: room.players.map((_, index) => Boolean(room.rematchReady?.[index])),
         playerIndex,
         players: room.players.map((player) => player ? player.name : null),
         ready: room.players.map((player) => Boolean(player?.ready)),
@@ -117,6 +178,7 @@ function sendJson(socket, message) {
 function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logger = console.error } = {}) {
     const rooms = loadRooms(dataFile);
     for (const room of Object.values(rooms)) {
+        if (!Array.isArray(room.rematchReady)) room.rematchReady = [false, false];
         for (const player of room.players) {
             if (player && !Number.isSafeInteger(player.placementVersion)) player.placementVersion = 0;
         }
@@ -170,6 +232,7 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
                 status: 'setup',
                 turn: 0,
                 winner: null,
+                rematchReady: [false, false],
                 players: [createPlayer(playerId, name), null]
             };
             rooms[id] = room;
@@ -205,7 +268,7 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
         broadcast(room);
     }
 
-    function updatePlacement(socket, command) {
+    function updatePlacement(socket, command, randomize = false) {
         const room = rooms[socket.roomId];
         if (!room || socket.playerIndex === undefined) return;
         const player = room.players[socket.playerIndex];
@@ -221,11 +284,12 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
             });
             return;
         }
-        if (!validateFleet(command.ships)) {
+        const ships = randomize ? generateRandomFleet() : command.ships;
+        if (!validateFleet(ships)) {
             fail(socket, 'Расстановка некорректна: корабли должны быть прямыми и не должны пересекаться или соприкасаться.');
             return;
         }
-        player.ships = command.ships;
+        player.ships = ships;
         player.placementVersion += 1;
         persist();
         broadcast(room);
@@ -310,6 +374,31 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
         broadcast(room);
     }
 
+    function requestRematch(socket) {
+        const room = rooms[socket.roomId];
+        if (!room || socket.playerIndex === undefined) return;
+        if (room.status !== 'finished') {
+            fail(socket, 'Новый раунд можно начать только после завершения партии.');
+            return;
+        }
+
+        room.rematchReady[socket.playerIndex] = true;
+        if (room.rematchReady.every(Boolean)) {
+            room.status = 'setup';
+            room.turn = 0;
+            room.winner = null;
+            room.rematchReady = [false, false];
+            for (const player of room.players) {
+                player.ships = [];
+                player.shots = [];
+                player.ready = false;
+                player.placementVersion += 1;
+            }
+        }
+        persist();
+        broadcast(room);
+    }
+
     const server = http.createServer((request, response) => {
         const pathname = new URL(request.url, 'http://localhost').pathname;
         const requestedPath = pathname === '/' ? '/index.html' : pathname;
@@ -340,10 +429,14 @@ function createGameServer({ dataFile = ROOMS_FILE, publicDir = PUBLIC_DIR, logge
                     joinRoom(socket, command);
                 } else if (command.type === 'placement') {
                     updatePlacement(socket, command);
+                } else if (command.type === 'randomPlacement') {
+                    updatePlacement(socket, command, true);
                 } else if (command.type === 'ready') {
                     markReady(socket);
                 } else if (command.type === 'shoot') {
                     shoot(socket, command);
+                } else if (command.type === 'rematch') {
+                    requestRematch(socket);
                 } else {
                     fail(socket, 'Неизвестная команда.');
                 }
@@ -391,4 +484,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { BOARD_SIZE, createGameServer, loadRooms, saveRooms };
+module.exports = { BOARD_SIZE, createGameServer, generateRandomFleet, loadRooms, saveRooms };

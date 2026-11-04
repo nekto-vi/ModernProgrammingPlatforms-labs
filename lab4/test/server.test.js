@@ -105,7 +105,9 @@ test('serves the game interface and static assets', async (t) => {
     assert.match(page.headers.get('content-type'), /text\/html/);
     const html = await page.text();
     assert.match(html, /Морской бой/);
-    assert.match(html, /app\.js\?v=5/);
+    assert.match(html, /app\.js\?v=7/);
+    assert.match(html, /Сыграть ещё раз/);
+    assert.match(html, /Случайная расстановка/);
 
     const script = await fetch(`${harness.baseUrl}/app.js`);
     assert.equal(script.status, 200);
@@ -240,6 +242,41 @@ test('players place fleets and the game starts only after both are ready', async
     assert.equal(missState.turn, 1);
 });
 
+test('random placement creates a valid replaceable fleet on every request', async (t) => {
+    const harness = await createHarness();
+    const player = await connect(harness.url);
+    t.after(async () => {
+        await closeSocket(player);
+        await harness.close();
+    });
+
+    const created = await sendAndWait(player, {
+        type: 'create',
+        name: 'Аня',
+        playerId: 'player-one'
+    });
+    let version = created.placementVersion;
+    let previousFleet;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+        const state = await sendAndWait(player, {
+            type: 'randomPlacement',
+            placementVersion: version
+        }, (message) => message.type === 'state' && message.placementVersion === version + 1);
+        assert.equal(state.ownShips.length, 10);
+        assert.equal(state.ownShips.flat().length, 20);
+        assert.deepEqual(
+            state.ownShips.reduce((counts, ship) => {
+                counts[ship.length] = (counts[ship.length] || 0) + 1;
+                return counts;
+            }, {}),
+            { 1: 4, 2: 3, 3: 2, 4: 1 }
+        );
+        if (previousFleet) assert.notDeepEqual(state.ownShips, previousFleet);
+        previousFleet = state.ownShips;
+        version = state.placementVersion;
+    }
+});
+
 test('saved setup restores ships and readiness after server restart', async (t) => {
     const harness = await createHarness();
     const player = await connect(harness.url);
@@ -276,6 +313,76 @@ test('saved setup restores ships and readiness after server restart', async (t) 
     assert.equal(restored.status, 'setup');
     assert.equal(restored.ready[restored.playerIndex], true);
     assert.deepEqual(restored.ownShips, fleet());
+});
+
+test('starts a new round in the same room after both players confirm a rematch', async (t) => {
+    const harness = await createHarness();
+    const first = await connect(harness.url);
+    const second = await connect(harness.url);
+    t.after(async () => {
+        await closeSocket(first);
+        await closeSocket(second);
+        await harness.close();
+    });
+
+    const created = await sendAndWait(first, {
+        type: 'create',
+        name: 'Аня',
+        playerId: 'player-one'
+    });
+    await sendAndWait(second, {
+        type: 'join',
+        roomId: created.roomId,
+        name: 'Ира',
+        playerId: 'player-two'
+    });
+
+    await sendAndWait(first, {
+        type: 'placement',
+        placementVersion: 0,
+        ships: fleet()
+    });
+    await sendAndWait(second, {
+        type: 'placement',
+        placementVersion: 0,
+        ships: fleet(1)
+    });
+    await sendAndWait(first, { type: 'ready' }, (message) => message.type === 'state' && message.ready[0]);
+    const playing = await sendAndWait(second, { type: 'ready' }, (message) => message.type === 'state' && message.status === 'playing');
+
+    let finished;
+    for (const cell of playing.ownShips.flat()) {
+        const shotState = waitForMessage(first, (message) => message.type === 'state'
+            && (message.status === 'finished'
+                || message.outgoingShots.some((shot) => shot.x === cell.x && shot.y === cell.y && shot.hit)));
+        first.send(JSON.stringify({ type: 'shoot', ...cell }));
+        finished = await shotState;
+    }
+    assert.equal(finished.status, 'finished');
+    assert.equal(finished.winner, 0);
+
+    const firstRequested = waitForMessage(first, (message) => message.type === 'state' && message.rematchReady[0]);
+    const secondSeesRequest = waitForMessage(second, (message) => message.type === 'state' && message.rematchReady[0]);
+    first.send(JSON.stringify({ type: 'rematch' }));
+    const [waitingFirst, waitingSecond] = await Promise.all([firstRequested, secondSeesRequest]);
+    assert.equal(waitingFirst.status, 'finished');
+    assert.deepEqual(waitingSecond.rematchReady, [true, false]);
+
+    const firstNewRound = waitForMessage(first, (message) => message.type === 'state' && message.status === 'setup');
+    const secondNewRound = sendAndWait(second, { type: 'rematch' }, (message) => message.type === 'state' && message.status === 'setup');
+    const [firstReset, secondReset] = await Promise.all([firstNewRound, secondNewRound]);
+    for (const state of [firstReset, secondReset]) {
+        assert.equal(state.roomId, created.roomId);
+        assert.deepEqual(state.players, ['Аня', 'Ира']);
+        assert.equal(state.winner, null);
+        assert.equal(state.turn, 0);
+        assert.deepEqual(state.ready, [false, false]);
+        assert.deepEqual(state.rematchReady, [false, false]);
+        assert.deepEqual(state.ownShips, []);
+        assert.deepEqual(state.outgoingShots, []);
+        assert.deepEqual(state.incomingShots, []);
+        assert.equal(state.placementVersion, 2);
+    }
 });
 
 test('rejects stale fleet edits and returns the latest version for retry', async (t) => {
