@@ -36,11 +36,19 @@ function setConnection(isConnected) {
     connectionBadge.classList.toggle('disconnected', !isConnected);
     connectionText.textContent = isConnected ? 'На связи' : 'Переподключение...';
 }
-
+ 
+// функция для установки и поддержания web-socket соединения
 function connect() {
+    // если функция вызывается повторно, то отменяет старый вызов, чтобы не дублировать сокеты
     clearTimeout(reconnectTimeout);
+
+    // выбор протокола 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     socket = new WebSocket(`${protocol}//${location.host}/ws`);
+
+    // если соединение установлено, то сбрасываем задержку повторного подключения, 
+    // устанавливаем флаг соединения и если есть текущая комната,
+    // то отправляем команду на присоединение к комнате
     socket.addEventListener('open', () => {
         retryDelay = 600;
         setConnection(true);
@@ -52,14 +60,18 @@ function connect() {
             queuedCommand = null;
         }
     });
+    // прием данных от сервера, обработка ошибок и обновление состояния игры
     socket.addEventListener('message', (event) => {
+        // парсим сообщение от сервера и проверяем его тип
         const message = JSON.parse(event.data);
         if (message.type === 'error') {
             pendingPlacement = false;
+            // конкуррентный доступ к комнате
             if (message.code === 'conflict' && message.state) {
                 currentState = message.state;
                 currentRoom = message.state.roomId;
             }
+            // если комната недоступна, возвращаемся в лобби
             if (message.code === 'room_unavailable') {
                 clearSavedRoom();
                 currentRoom = null;
@@ -71,6 +83,8 @@ function connect() {
             if (currentState) renderGame(currentState);
             else if (message.code !== 'room_unavailable') showMessage(message.message, true);
         } else if (message.type === 'state') {
+            // если сервер прислал состояние игры, 
+            // то обновляем текущее состояние и рендерим игру
             currentRoom = message.roomId;
             currentState = message;
             pendingPlacement = false;
@@ -344,6 +358,7 @@ function renderGame(state) {
             : 'Горизонтально';
         document.querySelector('#orientationButton').setAttribute('aria-pressed', String(vertical));
         document.querySelector('#orientationButton').disabled = ownReady;
+        document.querySelector('#randomPlacementButton').disabled = ownReady || pendingPlacement;
         document.querySelector('#undoButton').disabled = ownReady || !state.ownShips.length || pendingPlacement;
         document.querySelector('#readyButton').disabled = ownReady || !fleetIsComplete(state.ownShips) || pendingPlacement;
         document.querySelector('#readyButton').textContent = ownReady ? 'Ожидаем соперника...' : 'Готово';
@@ -369,8 +384,21 @@ function renderGame(state) {
         : yourTurn ? 'ТВОЙ ХОД' : 'ХОД СОПЕРНИКА';
     document.querySelector('#turnPill').classList.toggle('your-turn', yourTurn);
     document.querySelector('#playMessage').textContent = state.status === 'finished'
-        ? 'Чтобы сыграть снова, создай новую комнату.'
+        ? 'Новый раунд начнётся после подтверждения обоих игроков.'
         : yourTurn ? 'Попадание даёт ещё один выстрел. Промах передаёт ход.' : 'Ход перейдёт к тебе, когда соперник промахнётся.';
+    const rematchActions = document.querySelector('#rematchActions');
+    const rematchButton = document.querySelector('#rematchButton');
+    const rematchMessage = document.querySelector('#rematchMessage');
+    const ownRematchReady = state.rematchReady[state.playerIndex];
+    const opponentRematchReady = state.rematchReady[1 - state.playerIndex];
+    rematchActions.hidden = state.status !== 'finished';
+    rematchButton.disabled = ownRematchReady;
+    rematchButton.textContent = ownRematchReady ? 'Ждём соперника...' : 'Сыграть ещё раз';
+    rematchMessage.textContent = ownRematchReady
+        ? 'Ты подтвердил повторный раунд. Ждём решения соперника.'
+        : opponentRematchReady
+            ? 'Соперник хочет сыграть ещё раз. Подтверди, чтобы начать.'
+            : 'Оба игрока должны подтвердить начало нового раунда.';
     renderBoard(document.querySelector('#playOwnBoard'), 'own', state);
     renderBoard(document.querySelector('#targetBoard'), 'target', state);
 }
@@ -382,26 +410,54 @@ function renderEmptyBoard(element, boardSize) {
     }
 }
 
+// запрос на создание комнаты
 document.querySelector('#createButton').addEventListener('click', () => startRoom('create'));
+
+// запрос на присоединение к комнате
 document.querySelector('#joinButton').addEventListener('click', () => startRoom('join'));
 roomCodeInput.addEventListener('input', () => {
     roomCodeInput.value = roomCodeInput.value.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 6);
 });
+
+// запрос на смену ориентации корабля
 document.querySelector('#orientationButton').addEventListener('click', () => {
     vertical = !vertical;
     if (dragState) dragState.endX = dragState.endY = undefined;
     if (currentState) renderGame(currentState);
 });
+
+document.querySelector('#randomPlacementButton').addEventListener('click', () => {
+    if (currentState?.status !== 'setup'
+        || currentState.ready[currentState.playerIndex]
+        || pendingPlacement) return;
+    pendingPlacement = true;
+    showMessage('Подбираю случайную расстановку...');
+    send({
+        type: 'randomPlacement',
+        placementVersion: currentState.placementVersion
+    });
+});
+
+// запрос на отмену последнего размещённого корабля
 document.querySelector('#undoButton').addEventListener('click', () => {
     if (!currentState?.ownShips.length || pendingPlacement) return;
     pendingPlacement = true;
     showMessage('Обновляю расстановку...');
     savePlacement(currentState.ownShips.slice(0, -1));
 });
+
+// запрос на подтверждение готовности к игре
 document.querySelector('#readyButton').addEventListener('click', () => {
     showMessage('Отправляю готовность...');
     send({ type: 'ready' });
 });
+
+document.querySelector('#rematchButton').addEventListener('click', () => {
+    if (currentState?.status !== 'finished' || currentState.rematchReady[currentState.playerIndex]) return;
+    send({ type: 'rematch' });
+});
+
+// запрос на копирование ссылки на комнату в буфер обмена
 document.querySelector('#copyCodeButton').addEventListener('click', async () => {
     try {
         await navigator.clipboard.writeText(new URL(`?room=${encodeURIComponent(currentRoom)}`, location.href).href);
@@ -411,6 +467,8 @@ document.querySelector('#copyCodeButton').addEventListener('click', async () => 
         showMessage(`Не удалось скопировать код: ${error.message}`, true);
     }
 });
+
+// возврат в лобби и очистка сохранённой комнаты
 document.querySelector('#backButton').addEventListener('click', () => {
     currentRoom = null;
     currentState = null;
@@ -421,16 +479,22 @@ document.querySelector('#backButton').addEventListener('click', () => {
     lobbyMessage.textContent = '';
 });
 
+// завершение размещения корабля
 window.addEventListener('pointerup', finishPlacement);
+
 window.addEventListener('pointercancel', () => {
     dragState = null;
     document.querySelectorAll('.setup-cell').forEach((cell) => cell.classList.remove('preview-valid', 'preview-invalid'));
 });
+
+// запрос на повторное подключение при восстановлении интернет-соединения
 window.addEventListener('online', () => {
     if (!socket || socket.readyState === WebSocket.CLOSED) connect();
 });
 window.addEventListener('beforeunload', () => socket?.close());
 
+// проверка наличия сохранённой комнаты и имени игрока, 
+// если они есть, то сразу переходим в игру
 if (currentRoom && restoredName) {
     lobbyView.hidden = true;
     gameView.hidden = false;

@@ -73,6 +73,7 @@
                     <div id="shipChoices" class="ship-choices" aria-label="Выбор корабля"></div>
                     <button id="orientationButton" class="button rotate-button" type="button" aria-pressed="false">Повернуть · ↻</button>
                     <div class="setup-actions">
+                        <button id="randomPlacementButton" class="button" type="button">Случайная расстановка</button>
                         <button id="undoButton" class="button" type="button">Убрать последний</button>
                         <button id="readyButton" class="button button-primary" type="button" disabled>Готово</button>
                     </div>
@@ -90,10 +91,14 @@
                     <div id="targetBoard" class="board target-board" aria-label="Поле соперника"></div>
                 </div>
                 <p id="playMessage" class="play-message" role="status" aria-live="polite"></p>
+                <div id="rematchActions" class="rematch-actions" hidden>
+                    <button id="rematchButton" class="button button-primary" type="button">Сыграть ещё раз</button>
+                    <p id="rematchMessage" class="rematch-message" role="status" aria-live="polite"></p>
+                </div>
             </section>
         </section>
 
     </main>
-    <script src="/app.js?v=5"></script>
+    <script src="/app.js?v=7"></script>
 </body>
 </html>
