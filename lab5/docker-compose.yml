@@ -1,0 +1,149 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-travel_aggregator}
+      POSTGRES_USER: ${POSTGRES_USER:-travel_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-travel_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  seed:
+    build:
+      context: ./database
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-travel_user}:${POSTGRES_PASSWORD:-travel_password}@postgres:5432/${POSTGRES_DB:-travel_aggregator}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    restart: unless-stopped
+
+  catalog-subgraph:
+    build:
+      context: ./catalog-subgraph
+    environment:
+      NODE_ENV: development
+      PORT: 4001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-travel_user}:${POSTGRES_PASSWORD:-travel_password}@postgres:5432/${POSTGRES_DB:-travel_aggregator}
+      OTEL_SERVICE_NAME: catalog-subgraph
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "4001:4001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    restart: unless-stopped
+
+  external-subgraph:
+    build:
+      context: ./external-subgraph
+    environment:
+      NODE_ENV: development
+      PORT: 4002
+      REDIS_URL: redis://redis:6379
+      OTEL_SERVICE_NAME: external-subgraph
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "4002:4002"
+    depends_on:
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    restart: unless-stopped
+
+  reviews-subgraph:
+    build:
+      context: ./reviews-subgraph
+    environment:
+      NODE_ENV: development
+      PORT: 4003
+      DATABASE_URL: postgresql://${POSTGRES_USER:-travel_user}:${POSTGRES_PASSWORD:-travel_password}@postgres:5432/${POSTGRES_DB:-travel_aggregator}
+      REDIS_URL: redis://redis:6379
+      OTEL_SERVICE_NAME: reviews-subgraph
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "4003:4003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ./gateway
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      CATALOG_SUBGRAPH_URL: http://catalog-subgraph:4001/graphql
+      EXTERNAL_SUBGRAPH_URL: http://external-subgraph:4002/graphql
+      REVIEWS_SUBGRAPH_URL: http://reviews-subgraph:4003/graphql
+      OTEL_SERVICE_NAME: gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+    ports:
+      - "4000:4000"
+    depends_on:
+      jaeger:
+        condition: service_started
+      catalog-subgraph:
+        condition: service_started
+      external-subgraph:
+        condition: service_started
+      reviews-subgraph:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_GRAPHQL_URL: http://localhost:4000/graphql
+      VITE_REVIEWS_WS_URL: ws://localhost:4003/graphql
+    ports:
+      - "5173:5173"
+    depends_on:
+      gateway:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

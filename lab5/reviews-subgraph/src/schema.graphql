@@ -1,0 +1,36 @@
+extend schema
+  @link(
+    url: "https://specs.apollo.dev/federation/v2.0"
+    import: ["@key", "@external"]
+  )
+
+extend type Place @key(fields: "id") {
+  id: ID! @external
+  reviews: [Review!]!
+  reviewsCount: Int!
+}
+
+type Review {
+  id: ID!
+  placeId: ID!
+  author: String!
+  rating: Int!
+  comment: String!
+  createdAt: String!
+}
+
+input AddReviewInput {
+  placeId: ID!
+  author: String!
+  rating: Int!
+  comment: String!
+}
+
+type Mutation {
+  addReview(input: AddReviewInput!): Review!
+  deleteReview(id: ID!): Boolean!
+}
+
+type Subscription {
+  reviewAdded(placeId: ID): Review!
+}
