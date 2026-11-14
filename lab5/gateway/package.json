@@ -1,0 +1,29 @@
+{
+  "name": "travel-aggregator-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Apollo Federation gateway for the travel aggregator",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@apollo/server": "^5.5.2",
+    "@apollo/gateway": "^2.14.4",
+    "@as-integrations/express5": "^1.1.2",
+    "@opentelemetry/auto-instrumentations-node": "^0.83.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.301.2",
+    "@opentelemetry/resources": "^3.1.1",
+    "@opentelemetry/sdk-node": "^0.301.2",
+    "@opentelemetry/semantic-conventions": "^1.45.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "graphql": "^16.9.0",
+    "graphql-depth-limit": "^1.1.0"
+  },
+  "overrides": {
+    "@apollo/server": {
+      "@graphql-tools/utils": "^12.1.0"
+    }
+  }
+}

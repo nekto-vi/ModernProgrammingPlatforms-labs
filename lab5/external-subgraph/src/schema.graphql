@@ -1,0 +1,43 @@
+extend schema
+  @link(
+    url: "https://specs.apollo.dev/federation/v2.0"
+    import: ["@key", "@external", "@requires"]
+  )
+
+extend type City @key(fields: "id") {
+  id: ID! @external
+  lat: Float! @external
+  lon: Float! @external
+  weather: WeatherInfo @requires(fields: "lat lon")
+}
+
+type WeatherInfo {
+  temperature: Float!
+  windSpeed: Float!
+  weatherCode: Int!
+  isDay: Boolean!
+}
+
+extend type Place @key(fields: "id") {
+  id: ID! @external
+  name: String! @external
+  wikiSummary: WikiInfo @requires(fields: "name")
+}
+
+type WikiInfo {
+  title: String!
+  extract: String!
+  thumbnailUrl: String
+  pageUrl: String
+}
+
+type ExchangeRate {
+  currencyCode: String!
+  scale: Int!
+  name: String!
+  rateToByn: Float!
+}
+
+type Query {
+  exchangeRates: [ExchangeRate!]!
+}

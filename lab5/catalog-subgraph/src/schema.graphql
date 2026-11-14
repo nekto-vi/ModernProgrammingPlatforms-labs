@@ -1,0 +1,74 @@
+extend schema
+  @link(
+    url: "https://specs.apollo.dev/federation/v2.0"
+    import: ["@key", "@shareable"]
+  )
+
+type Country @key(fields: "code") {
+  code: ID!
+  name: String!
+  capital: String
+  currency: String
+  region: String
+  flagUrl: String
+  cities: [City!]!
+}
+
+type City @key(fields: "id") {
+  id: ID!
+  name: String!
+  countryCode: String!
+  lat: Float!
+  lon: Float!
+  country: Country
+  places(limit: Int = 10, offset: Int = 0): PlaceConnection!
+}
+
+type Place @key(fields: "id") {
+  id: ID!
+  osmId: String
+  name: String!
+  category: String!
+  lat: Float!
+  lon: Float!
+  address: String
+  rating: Float!
+  city: City!
+}
+
+type PlaceConnection {
+  items: [Place!]!
+  totalCount: Int!
+  hasMore: Boolean!
+}
+
+input PlaceFilterInput {
+  countryCode: String
+  cityId: ID
+  category: String
+  minRating: Float
+  search: String
+}
+
+enum PlaceSortField {
+  NAME
+  RATING
+}
+
+enum SortOrder {
+  ASC
+  DESC
+}
+
+type Query {
+  countries: [Country!]!
+  cities(countryCode: String): [City!]!
+  places(
+    filter: PlaceFilterInput
+    sortBy: PlaceSortField = RATING
+    sortOrder: SortOrder = DESC
+    limit: Int = 20
+    offset: Int = 0
+  ): PlaceConnection!
+  place(id: ID!): Place
+}
